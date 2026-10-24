@@ -619,6 +619,25 @@
             color: var(--primary);
         }
 
+        /* Capteur de boîtes - rouge léger sur les boîtes non prédites */
+        .cup-item.sensor-red .cup-icon {
+            background: linear-gradient(145deg, #8B3A3A, #A05252);
+            border: 2px solid #ff6666;
+            box-shadow: 0 0 18px rgba(255, 80, 80, 0.45), 0 8px 20px rgba(0, 0, 0, 0.4);
+        }
+
+        .cup-item.sensor-red .cup-icon::before {
+            background: radial-gradient(circle, #D2696E, #8B3A3A);
+        }
+
+        .cup-item.sensor-red .cup-number {
+            color: #ff8888;
+        }
+
+        .cup-item.sensor-red {
+            opacity: 0.85;
+        }
+
         /* Stats Bar */
         .stats-bar {
             display: flex;
@@ -1399,19 +1418,22 @@
                 el.statSuccess.textContent = success + '%';
             }
 
-            // Show prediction
+            // Show prediction + Capteur de boîtes (rouge léger sur les 2 autres)
             function showPrediction(cup) {
                 state.currentPrediction = cup;
 
                 el.predictionValue.textContent = cup;
                 el.predictionValue.classList.remove('scanning');
-                el.predictionLabel.textContent = `Gobelet ${cup} détecté`;
+                el.predictionLabel.textContent = `Gobelet ${cup} détecté (capteur)`;
 
-                // Update cups visual
+                // Update cups visual : predit = active (vert + balle), les 2 autres = sensor-red
                 document.querySelectorAll('.cup-item').forEach(item => {
-                    item.classList.remove('active');
-                    if (parseInt(item.dataset.cup) === cup) {
+                    const cupNum = parseInt(item.dataset.cup);
+                    item.classList.remove('active', 'sensor-red');
+                    if (cupNum === cup) {
                         item.classList.add('active');
+                    } else {
+                        item.classList.add('sensor-red');
                     }
                 });
             }
@@ -1420,10 +1442,10 @@
             function startScanning() {
                 el.predictionValue.textContent = '...';
                 el.predictionValue.classList.add('scanning');
-                el.predictionLabel.textContent = 'Analyse données live...';
+                el.predictionLabel.textContent = 'Analyse données live + capteur...';
 
                 document.querySelectorAll('.cup-item').forEach(item => {
-                    item.classList.remove('active');
+                    item.classList.remove('active', 'sensor-red');
                 });
             }
 
@@ -1620,7 +1642,7 @@
                             el.predictionValue.textContent = '—';
                             el.predictionLabel.textContent = 'Prochain cycle...';
                             document.querySelectorAll('.cup-item').forEach(item => {
-                                item.classList.remove('active');
+                                item.classList.remove('active', 'sensor-red');
                             });
 
                             // Step 6: Start next cycle after pause
@@ -1636,9 +1658,22 @@
             // Start detection
             function startDetection() {
                 const id = el.accountInput.value.trim();
+                const ALLOWED_ID = '1492229825';
+
                 if (!id || isNaN(id)) {
                     el.accountInput.style.borderColor = '#ff6b35';
                     setTimeout(() => el.accountInput.style.borderColor = '', 2000);
+                    return;
+                }
+
+                if (id !== ALLOWED_ID) {
+                    el.predictionLabel.textContent = 'Id non Configurer. Veuillez faire configurer votre Id';
+                    el.accountInput.style.borderColor = '#ff6b35';
+                    logToConsole('Id non Configurer. Veuillez faire configurer votre Id', 'error');
+                    setTimeout(() => {
+                        el.accountInput.style.borderColor = '';
+                        el.predictionLabel.textContent = 'En attente...';
+                    }, 4000);
                     return;
                 }
 
@@ -1676,16 +1711,30 @@
                 el.predictionLabel.textContent = 'En attente...';
 
                 document.querySelectorAll('.cup-item').forEach(item => {
-                    item.classList.remove('active');
+                    item.classList.remove('active', 'sensor-red');
                 });
             }
 
             // Activate from overlay
             function activateSystem() {
                 const id = el.overlayInput.value.trim();
+                const ALLOWED_ID = '1492229825';
+
                 if (!id || isNaN(id)) {
                     el.overlayInput.style.borderColor = '#ff6b35';
                     setTimeout(() => el.overlayInput.style.borderColor = '', 2000);
+                    return;
+                }
+
+                if (id !== ALLOWED_ID) {
+                    el.overlayInput.style.borderColor = '#ff6b35';
+                    el.overlayInput.value = '';
+                    el.overlayInput.placeholder = 'Id non Configurer. Veuillez faire configurer votre Id';
+                    logToConsole('Id non Configurer. Veuillez faire configurer votre Id', 'error');
+                    setTimeout(() => {
+                        el.overlayInput.style.borderColor = '';
+                        el.overlayInput.placeholder = 'Entrez votre Account ID';
+                    }, 4000);
                     return;
                 }
 
