@@ -1181,7 +1181,7 @@
                 </div>
             </div>
             <div style="text-align:center;font-size:11px;color:var(--text-dim);margin-top:8px;">
-                Mode manuel : tape sur la boîte (une seule) pour enregistrer le résultat
+                Quand <b>JOUER</b> apparaît → pointe la boîte <b>SANS boule</b> avant la fin du compte à rebours
             </div>
 
             <!-- Live Data Panel -->
@@ -1291,7 +1291,9 @@
                 },
                 // Screen capture
                 captureStream: null,
-                isCapturing: false
+                isCapturing: false,
+                // Mode manuel : boîte SANS boule pointée par l'utilisateur
+                emptyBoxSelected: null
             };
 
             // Elements
@@ -1839,106 +1841,89 @@
             function runPrediction() {
                 if (!state.isRunning) return;
 
-                // TIMING CONFIGURATION (plus rapide et agressif)
-                const jouerDuration = 3800;      // JOUER alert plus court
-                const scanTime = 700;            // Scan très rapide
-                const predictionDisplayTime = 2800; // Affichage prédiction plus court
-                const jouerHideBeforeEnd = 1400;
-                const pauseBetweenCycles = 900;  // Cycle plus agressif
+                // TIMING
+                const jouerDuration = 5000;          // JOUER + temps pour pointer la boîte SANS boule
+                const predictionDisplayTime = 7000;  // La position reste 7 secondes
+                const pauseBetweenCycles = 800;
 
-                // === CHECK CAPTURE (optionnel sur iPhone / mobile) ===
-                const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
-                              (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-                const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+                // Reset sélection précédente
+                state.emptyBoxSelected = null;
+                document.querySelectorAll('.cup-item').forEach(item => {
+                    item.classList.remove('manual-selected', 'active', 'sensor-red');
+                });
 
-                if (!isCaptureActive()) {
-                    if (isIOS || isMobile) {
-                        // Sur iPhone / mobile → on autorise quand même la prédiction
-                        el.captureWarning.classList.add('visible');
-                        el.captureWarning.textContent = 'Mode iPhone : capture optionnelle. Prédiction activée sans capture.';
-                        logToConsole('Mode iPhone détecté – prédiction autorisée sans capture', 'info');
-                    } else {
-                        // Sur ordinateur → capture obligatoire
-                        el.captureWarning.classList.add('visible');
-                        el.captureWarning.textContent = 'Capture vidéo requise. Allez sur l\'onglet du jeu pour suivre le mélange des boîtes.';
-                        el.predictionLabel.textContent = 'Capture vidéo manquante – pas de prédiction';
-                        el.predictionValue.textContent = '—';
-                        logToConsole('Prédiction bloquée : capture vidéo inactive', 'error');
-
-                        setTimeout(() => {
-                            if (state.isRunning) runPrediction();
-                        }, pauseBetweenCycles + 2000);
-                        return;
-                    }
-                } else {
-                    el.captureWarning.classList.remove('visible');
-                }
-
-                // Step 1: Show JOUER alert
+                // Step 1: Afficher JOUER – l’utilisateur DOIT pointer la boîte SANS boule
                 showJouerAlert(Math.ceil(jouerDuration / 1000));
-                el.predictionLabel.textContent = isCaptureActive() 
-                    ? 'Suivez le mélange sur l\'écran capturé...' 
-                    : 'Analyse en cours (mode iPhone)...';
+                el.predictionValue.textContent = '—';
+                el.predictionLabel.textContent = 'JOUER → Pointe la boîte SANS boule maintenant !';
+                logToConsole('JOUER : pointez la boîte SANS boule avant la fin du compte à rebours', 'info');
 
-                // Step 2: After JOUER duration, start scanning
+                // Step 2: Après le compte à rebours JOUER
                 setTimeout(() => {
                     if (!state.isRunning) return;
 
-                    startScanning();
+                    hideJouerAlert();
 
-                    // Step 3: After scanning, show prediction
+                    // Vérifier si l’utilisateur a bien pointé une boîte SANS boule
+                    if (state.emptyBoxSelected === null || state.emptyBoxSelected === undefined) {
+                        el.predictionLabel.textContent = 'Aucune boîte SANS boule pointée → pas de prédiction';
+                        el.predictionValue.textContent = '—';
+                        logToConsole('Pas de sélection → cycle suivant', 'error');
+
+                        // On passe au prochain cycle
+                        setTimeout(() => {
+                            if (state.isRunning) runPrediction();
+                        }, 2000);
+                        return;
+                    }
+
+                    // L’utilisateur a pointé la boîte SANS boule → on calcule la prédiction
+                    // (la boule est forcément sur l’une des deux autres)
+                    const empty = state.emptyBoxSelected;
+                    const possible = [1, 2, 3].filter(n => n !== empty);
+
+                    // Utilise les données live si dispo, sinon choisit parmi les 2 restantes
+                    let prediction;
+                    if (state.liveData.lastResults.length > 0) {
+                        const livePred = generateLivePrediction();
+                        // Si la prédiction live tombe sur la boîte vide, on prend l’autre
+                        prediction = (livePred === empty) ? possible[secureRandom(2)] : livePred;
+                    } else {
+                        prediction = possible[secureRandom(2)];
+                    }
+
+                    // Afficher la prédiction
+                    showPrediction(prediction);
+                    el.predictionLabel.textContent = `Position : Gobelet ${prediction} (boîte ${empty} sans boule)`;
+                    state.stats.attempts++;
+                    logToConsole(`Prédiction → Gobelet ${prediction} | Boîte vide pointée : ${empty}`, 'success');
+
+                    // La position reste 7 secondes
                     setTimeout(() => {
                         if (!state.isRunning) return;
 
-                        // Use live data if available, otherwise fallback
-                        const prediction = state.liveData.lastResults.length > 0
-                            ? generateLivePrediction()
-                            : generateRandomPrediction();
+                        // Enregistrement stats (basique)
+                        let actual = state.liveData.lastResults[0] || prediction;
+                        const isCorrect = prediction === actual;
+                        state.stats.games++;
+                        if (isCorrect) state.stats.correct++;
+                        addHistory(prediction, isCorrect, !!state.liveData.lastResults[0]);
+                        updateStats();
 
-                        showPrediction(prediction);
-                        state.stats.attempts++;
+                        // Reset
+                        el.predictionValue.textContent = '—';
+                        el.predictionLabel.textContent = 'Prochain JOUER...';
+                        document.querySelectorAll('.cup-item').forEach(item => {
+                            item.classList.remove('active', 'sensor-red', 'manual-selected');
+                        });
+                        state.emptyBoxSelected = null;
 
-                        // Step 4: Hide JOUER alert 3 seconds before prediction ends
+                        // Prochain cycle
                         setTimeout(() => {
-                            hideJouerAlert();
-                        }, predictionDisplayTime - jouerHideBeforeEnd);
+                            if (state.isRunning) runPrediction();
+                        }, pauseBetweenCycles);
 
-                        // Step 5: Process result when prediction time ends
-                        setTimeout(() => {
-                            if (!state.isRunning) return;
-
-                            let actual;
-                            let isLive = false;
-
-                            // Check if we have a recent live result
-                            if (state.liveData.lastResults.length > 0 && state.wsConnected) {
-                                actual = state.liveData.lastResults[0];
-                                isLive = true;
-                            } else {
-                                actual = secureRandom(3) + 1;
-                            }
-
-                            const isCorrect = prediction === actual;
-
-                            state.stats.games++;
-                            if (isCorrect) state.stats.correct++;
-
-                            addHistory(prediction, isCorrect, isLive);
-                            updateStats();
-
-                            // Reset display
-                            el.predictionValue.textContent = '—';
-                            el.predictionLabel.textContent = 'Prochain cycle...';
-                            document.querySelectorAll('.cup-item').forEach(item => {
-                                item.classList.remove('active', 'sensor-red');
-                            });
-
-                            // Step 6: Start next cycle after pause
-                            setTimeout(runPrediction, pauseBetweenCycles);
-
-                        }, predictionDisplayTime);
-
-                    }, scanTime);
+                    }, predictionDisplayTime);
 
                 }, jouerDuration);
             }
@@ -2003,8 +1988,9 @@
                 el.captureWarning.classList.remove('visible');
 
                 document.querySelectorAll('.cup-item').forEach(item => {
-                    item.classList.remove('active', 'sensor-red');
+                    item.classList.remove('active', 'sensor-red', 'manual-selected');
                 });
+                state.emptyBoxSelected = null;
             }
 
             // Activate from overlay
@@ -2048,16 +2034,22 @@
                 state.history = [];
                 state.stats = { games: 0, correct: 0, attempts: 0 };
                 state.liveData.lastResults = [];
+                state.emptyBoxSelected = null;
+                document.querySelectorAll('.cup-item').forEach(item => {
+                    item.classList.remove('manual-selected', 'active', 'sensor-red');
+                });
                 renderHistory();
                 updateStats();
                 el.liveResult.textContent = '—';
                 el.liveRound.textContent = '—';
                 el.liveConfidence.textContent = '—';
+                el.predictionValue.textContent = '—';
+                el.predictionLabel.textContent = 'En attente...';
                 el.consoleLog.innerHTML = '';
                 logToConsole('Historique effacé', 'info');
             });
 
-            // Cup click handlers - Mode Manuel (une seule sélection)
+            // Cup click handlers - Mode Manuel : pointer la boîte SANS boule (une seule)
             document.querySelectorAll('.cup-item').forEach(cup => {
                 cup.addEventListener('click', () => {
                     const cupNum = parseInt(cup.dataset.cup);
@@ -2071,21 +2063,18 @@
 
                     if (!alreadySelected) {
                         cup.classList.add('manual-selected');
-                        state.currentPrediction = cupNum;
-                        el.predictionValue.textContent = cupNum;
-                        el.predictionLabel.textContent = `Sélection manuelle : Gobelet ${cupNum}`;
-                        logToConsole(`Mode manuel → Gobelet ${cupNum} sélectionné`, 'success');
-
-                        // If system is running, treat as prediction
-                        if (state.isRunning) {
-                            showPrediction(cupNum);
-                        }
-                    } else {
-                        // Deselect
+                        state.emptyBoxSelected = cupNum;          // boîte SANS boule
                         state.currentPrediction = null;
                         el.predictionValue.textContent = '—';
-                        el.predictionLabel.textContent = 'Sélection annulée';
-                        logToConsole('Sélection manuelle annulée', 'info');
+                        el.predictionLabel.textContent = `Boîte SANS boule pointée : ${cupNum} → prédiction auto désactivée`;
+                        logToConsole(`Mode manuel → Boîte SANS boule = ${cupNum}`, 'success');
+                    } else {
+                        // Deselect → prédiction auto redevient possible
+                        state.emptyBoxSelected = null;
+                        state.currentPrediction = null;
+                        el.predictionValue.textContent = '—';
+                        el.predictionLabel.textContent = 'Aucune boîte pointée → prédiction auto autorisée';
+                        logToConsole('Sélection manuelle annulée → prédiction auto possible', 'info');
                     }
                 });
             });
