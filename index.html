@@ -212,6 +212,111 @@
             margin-bottom: 25px;
         }
 
+        /* Screen Capture Section */
+        .capture-section {
+            background: var(--bg-card);
+            border: 1px solid rgba(255, 100, 100, 0.35);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .capture-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+
+        .capture-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 12px;
+            color: #ff8888;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+
+        .capture-status {
+            font-size: 11px;
+            padding: 4px 10px;
+            border-radius: 12px;
+            background: rgba(255, 80, 80, 0.15);
+            border: 1px solid rgba(255, 80, 80, 0.4);
+            color: #ff8888;
+        }
+
+        .capture-status.active {
+            background: rgba(0, 255, 136, 0.15);
+            border-color: var(--primary-dim);
+            color: var(--primary);
+        }
+
+        .capture-preview {
+            width: 100%;
+            max-height: 160px;
+            background: #000;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 12px;
+            display: none;
+            border: 1px solid rgba(255, 100, 100, 0.3);
+        }
+
+        .capture-preview.active {
+            display: block;
+        }
+
+        .capture-preview video {
+            width: 100%;
+            height: 160px;
+            object-fit: contain;
+            background: #000;
+        }
+
+        .capture-btn {
+            width: 100%;
+            padding: 12px;
+            background: transparent;
+            border: 2px solid #ff6666;
+            border-radius: 10px;
+            color: #ff8888;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .capture-btn:hover {
+            background: rgba(255, 80, 80, 0.15);
+            box-shadow: 0 0 20px rgba(255, 80, 80, 0.3);
+        }
+
+        .capture-btn.active {
+            border-color: var(--primary);
+            color: var(--primary);
+            background: rgba(0, 255, 136, 0.1);
+        }
+
+        .capture-warning {
+            display: none;
+            margin-top: 10px;
+            padding: 10px 14px;
+            background: rgba(255, 50, 50, 0.12);
+            border: 1px solid #ff4444;
+            border-radius: 8px;
+            font-size: 12px;
+            color: #ff6666;
+            text-align: center;
+            line-height: 1.4;
+        }
+
+        .capture-warning.visible {
+            display: block;
+        }
+
         .input-group {
             margin-bottom: 20px;
         }
@@ -942,7 +1047,7 @@
                 <span class="brand-name">X~Code●</span>
                 <img src="https://pfst.cf2.poecdn.net/base/image/65657b77e8839cfa847e4c4a811781bb99060deea0cc7a2b2e42b2d72a80e3ba?w=640&h=640" alt="X~Code Logo" class="badge-img">
             </div>
-            <span class="version-tag">THIMBLES DETECTOR v19.0 • LIVE WS</span>
+            <span class="version-tag">THIMBLES DETECTOR v20.0 • CAPTEUR VIDÉO</span>
         </header>
 
         <!-- WebSocket Status Bar -->
@@ -961,6 +1066,21 @@
             <div class="btn-group">
                 <button class="btn btn-primary" id="start-btn">DÉMARRER</button>
                 <button class="btn btn-secondary" id="stop-btn" disabled>ARRÊTER</button>
+            </div>
+        </section>
+
+        <!-- Screen Capture Section -->
+        <section class="capture-section">
+            <div class="capture-header">
+                <span class="capture-title">Capteur Vidéo (Écran du jeu)</span>
+                <span class="capture-status" id="capture-status">Inactif</span>
+            </div>
+            <div class="capture-preview" id="capture-preview">
+                <video id="capture-video" autoplay muted playsinline></video>
+            </div>
+            <button class="capture-btn" id="capture-btn">CAPTURER L'ÉCRAN DU JEU</button>
+            <div class="capture-warning" id="capture-warning">
+                Capture vidéo requise. Allez sur l'onglet du jeu pour suivre le mélange des boîtes.
             </div>
         </section>
 
@@ -1110,7 +1230,10 @@
                     currentRound: null,
                     gameState: null,
                     serverTime: null
-                }
+                },
+                // Screen capture
+                captureStream: null,
+                isCapturing: false
             };
 
             // Elements
@@ -1141,7 +1264,13 @@
                 consoleLog: document.getElementById('console-log'),
                 // Jouer alert elements
                 jouerAlert: document.getElementById('jouer-alert'),
-                jouerCountdown: document.getElementById('jouer-countdown')
+                jouerCountdown: document.getElementById('jouer-countdown'),
+                // Capture elements
+                captureBtn: document.getElementById('capture-btn'),
+                captureStatus: document.getElementById('capture-status'),
+                capturePreview: document.getElementById('capture-preview'),
+                captureVideo: document.getElementById('capture-video'),
+                captureWarning: document.getElementById('capture-warning')
             };
 
             // Jouer alert timing variables
@@ -1191,6 +1320,71 @@
                 while (el.consoleLog.children.length > 50) {
                     el.consoleLog.removeChild(el.consoleLog.lastChild);
                 }
+            }
+
+            // ========== SCREEN CAPTURE (Capteur Vidéo) ==========
+            async function startScreenCapture() {
+                try {
+                    if (state.isCapturing) {
+                        stopScreenCapture();
+                        return;
+                    }
+
+                    const stream = await navigator.mediaDevices.getDisplayMedia({
+                        video: {
+                            displaySurface: 'browser',
+                            frameRate: 15
+                        },
+                        audio: false
+                    });
+
+                    state.captureStream = stream;
+                    state.isCapturing = true;
+
+                    el.captureVideo.srcObject = stream;
+                    el.capturePreview.classList.add('active');
+                    el.captureBtn.classList.add('active');
+                    el.captureBtn.textContent = 'ARRÊTER LA CAPTURE';
+                    el.captureStatus.textContent = 'Actif';
+                    el.captureStatus.classList.add('active');
+                    el.captureWarning.classList.remove('visible');
+
+                    logToConsole('✓ Capture d\'écran du jeu activée', 'success');
+
+                    // If user stops sharing from browser UI
+                    stream.getVideoTracks()[0].onended = () => {
+                        stopScreenCapture();
+                        logToConsole('Capture d\'écran arrêtée par l\'utilisateur', 'error');
+                    };
+
+                } catch (err) {
+                    logToConsole('Capture refusée ou erreur: ' + err.message, 'error');
+                    el.captureWarning.classList.add('visible');
+                    el.captureWarning.textContent = 'Capture refusée. Autorisez le partage de l\'onglet du jeu.';
+                }
+            }
+
+            function stopScreenCapture() {
+                if (state.captureStream) {
+                    state.captureStream.getTracks().forEach(track => track.stop());
+                    state.captureStream = null;
+                }
+                state.isCapturing = false;
+
+                el.captureVideo.srcObject = null;
+                el.capturePreview.classList.remove('active');
+                el.captureBtn.classList.remove('active');
+                el.captureBtn.textContent = 'CAPTURER L\'ÉCRAN DU JEU';
+                el.captureStatus.textContent = 'Inactif';
+                el.captureStatus.classList.remove('active');
+
+                logToConsole('Capture d\'écran désactivée', 'info');
+            }
+
+            function isCaptureActive() {
+                return state.isCapturing && state.captureStream &&
+                       state.captureStream.getVideoTracks().length > 0 &&
+                       state.captureStream.getVideoTracks()[0].readyState === 'live';
             }
 
             // WebSocket Connection
@@ -1588,13 +1782,42 @@
                 const jouerHideBeforeEnd = 3000; // Hide JOUER 3s before prediction disappears
                 const pauseBetweenCycles = 2000; // Pause before next cycle
 
+                // === CHECK CAPTURE BEFORE ALLOWING PREDICTION ===
+                if (!isCaptureActive()) {
+                    el.captureWarning.classList.add('visible');
+                    el.captureWarning.textContent = 'Capture vidéo requise. Allez sur l\'onglet du jeu pour suivre le mélange des boîtes.';
+                    el.predictionLabel.textContent = 'Capture vidéo manquante – pas de prédiction';
+                    el.predictionValue.textContent = '—';
+                    logToConsole('Prédiction bloquée : capture vidéo inactive', 'error');
+
+                    // Retry after pause
+                    setTimeout(() => {
+                        if (state.isRunning) runPrediction();
+                    }, pauseBetweenCycles + 2000);
+                    return;
+                }
+
+                // Capture is active → hide warning
+                el.captureWarning.classList.remove('visible');
+
                 // Step 1: Show JOUER alert
                 showJouerAlert(Math.ceil(jouerDuration / 1000));
-                el.predictionLabel.textContent = 'Préparez votre mise...';
+                el.predictionLabel.textContent = 'Suivez le mélange sur l\'écran capturé...';
 
                 // Step 2: After JOUER duration, start scanning
                 setTimeout(() => {
                     if (!state.isRunning) return;
+
+                    // Re-check capture still active after countdown
+                    if (!isCaptureActive()) {
+                        el.captureWarning.classList.add('visible');
+                        el.predictionLabel.textContent = 'Capture perdue – prédiction annulée';
+                        logToConsole('Capture perdue pendant le compte à rebours', 'error');
+                        setTimeout(() => {
+                            if (state.isRunning) runPrediction();
+                        }, pauseBetweenCycles);
+                        return;
+                    }
 
                     startScanning();
 
@@ -1702,6 +1925,9 @@
                 // Hide JOUER alert
                 hideJouerAlert();
 
+                // Optionally keep capture running so user doesn't have to re-share every time
+                // stopScreenCapture();
+
                 el.startBtn.disabled = false;
                 el.stopBtn.disabled = true;
                 el.predictionStatus.classList.add('inactive');
@@ -1709,6 +1935,7 @@
                 el.predictionValue.textContent = '—';
                 el.predictionValue.classList.remove('scanning');
                 el.predictionLabel.textContent = 'En attente...';
+                el.captureWarning.classList.remove('visible');
 
                 document.querySelectorAll('.cup-item').forEach(item => {
                     item.classList.remove('active', 'sensor-red');
@@ -1750,6 +1977,7 @@
 
             el.startBtn.addEventListener('click', startDetection);
             el.stopBtn.addEventListener('click', stopDetection);
+            el.captureBtn.addEventListener('click', startScreenCapture);
 
             el.clearHistory.addEventListener('click', () => {
                 state.history = [];
