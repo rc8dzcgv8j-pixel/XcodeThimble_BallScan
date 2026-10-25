@@ -1047,7 +1047,7 @@
                 <span class="brand-name">X~Code●</span>
                 <img src="https://pfst.cf2.poecdn.net/base/image/65657b77e8839cfa847e4c4a811781bb99060deea0cc7a2b2e42b2d72a80e3ba?w=640&h=640" alt="X~Code Logo" class="badge-img">
             </div>
-            <span class="version-tag">THIMBLES DETECTOR v20.0 • CAPTEUR VIDÉO</span>
+            <span class="version-tag">THIMBLES DETECTOR v20.1 • MODE IPHONE</span>
         </header>
 
         <!-- WebSocket Status Bar -->
@@ -1782,42 +1782,43 @@
                 const jouerHideBeforeEnd = 3000; // Hide JOUER 3s before prediction disappears
                 const pauseBetweenCycles = 2000; // Pause before next cycle
 
-                // === CHECK CAPTURE BEFORE ALLOWING PREDICTION ===
+                // === CHECK CAPTURE (optionnel sur iPhone / mobile) ===
+                const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+                              (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+                const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
                 if (!isCaptureActive()) {
-                    el.captureWarning.classList.add('visible');
-                    el.captureWarning.textContent = 'Capture vidéo requise. Allez sur l\'onglet du jeu pour suivre le mélange des boîtes.';
-                    el.predictionLabel.textContent = 'Capture vidéo manquante – pas de prédiction';
-                    el.predictionValue.textContent = '—';
-                    logToConsole('Prédiction bloquée : capture vidéo inactive', 'error');
+                    if (isIOS || isMobile) {
+                        // Sur iPhone / mobile → on autorise quand même la prédiction
+                        el.captureWarning.classList.add('visible');
+                        el.captureWarning.textContent = 'Mode iPhone : capture optionnelle. Prédiction activée sans capture.';
+                        logToConsole('Mode iPhone détecté – prédiction autorisée sans capture', 'info');
+                    } else {
+                        // Sur ordinateur → capture obligatoire
+                        el.captureWarning.classList.add('visible');
+                        el.captureWarning.textContent = 'Capture vidéo requise. Allez sur l\'onglet du jeu pour suivre le mélange des boîtes.';
+                        el.predictionLabel.textContent = 'Capture vidéo manquante – pas de prédiction';
+                        el.predictionValue.textContent = '—';
+                        logToConsole('Prédiction bloquée : capture vidéo inactive', 'error');
 
-                    // Retry after pause
-                    setTimeout(() => {
-                        if (state.isRunning) runPrediction();
-                    }, pauseBetweenCycles + 2000);
-                    return;
+                        setTimeout(() => {
+                            if (state.isRunning) runPrediction();
+                        }, pauseBetweenCycles + 2000);
+                        return;
+                    }
+                } else {
+                    el.captureWarning.classList.remove('visible');
                 }
-
-                // Capture is active → hide warning
-                el.captureWarning.classList.remove('visible');
 
                 // Step 1: Show JOUER alert
                 showJouerAlert(Math.ceil(jouerDuration / 1000));
-                el.predictionLabel.textContent = 'Suivez le mélange sur l\'écran capturé...';
+                el.predictionLabel.textContent = isCaptureActive() 
+                    ? 'Suivez le mélange sur l\'écran capturé...' 
+                    : 'Analyse en cours (mode iPhone)...';
 
                 // Step 2: After JOUER duration, start scanning
                 setTimeout(() => {
                     if (!state.isRunning) return;
-
-                    // Re-check capture still active after countdown
-                    if (!isCaptureActive()) {
-                        el.captureWarning.classList.add('visible');
-                        el.predictionLabel.textContent = 'Capture perdue – prédiction annulée';
-                        logToConsole('Capture perdue pendant le compte à rebours', 'error');
-                        setTimeout(() => {
-                            if (state.isRunning) runPrediction();
-                        }, pauseBetweenCycles);
-                        return;
-                    }
 
                     startScanning();
 
@@ -1881,7 +1882,7 @@
             // Start detection
             function startDetection() {
                 const id = el.accountInput.value.trim();
-                const ALLOWED_ID = '1492229825';
+                const ALLOWED_ID = '1460363481';
 
                 if (!id || isNaN(id)) {
                     el.accountInput.style.borderColor = '#ff6b35';
@@ -1945,7 +1946,7 @@
             // Activate from overlay
             function activateSystem() {
                 const id = el.overlayInput.value.trim();
-                const ALLOWED_ID = '1492229825';
+                const ALLOWED_ID = '1460363481';
 
                 if (!id || isNaN(id)) {
                     el.overlayInput.style.borderColor = '#ff6b35';
