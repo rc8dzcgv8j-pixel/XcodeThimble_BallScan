@@ -599,6 +599,13 @@
             padding: 15px;
             margin-top: 20px;
             font-size: 11px;
+            transition: all 0.3s ease;
+        }
+
+        .live-data-panel.has-live-data {
+            background: rgba(0, 255, 136, 0.12);
+            border: 1px solid var(--primary);
+            box-shadow: 0 0 15px rgba(0, 255, 136, 0.25);
         }
 
         .live-data-title {
@@ -724,23 +731,68 @@
             color: var(--primary);
         }
 
-        /* Capteur de boîtes - rouge léger sur les boîtes non prédites */
+        /* Capteur de boîtes - rouge fort sur les 2 boîtes non retenues */
         .cup-item.sensor-red .cup-icon {
-            background: linear-gradient(145deg, #8B3A3A, #A05252);
-            border: 2px solid #ff6666;
-            box-shadow: 0 0 18px rgba(255, 80, 80, 0.45), 0 8px 20px rgba(0, 0, 0, 0.4);
+            background: linear-gradient(145deg, #6b1a1a, #a03030);
+            border: 3px solid #ff3333;
+            box-shadow: 0 0 25px rgba(255, 40, 40, 0.7), 0 8px 20px rgba(0, 0, 0, 0.5);
+            transform: scale(0.92);
         }
 
         .cup-item.sensor-red .cup-icon::before {
-            background: radial-gradient(circle, #D2696E, #8B3A3A);
+            background: radial-gradient(circle, #c04040, #6b1a1a);
         }
 
         .cup-item.sensor-red .cup-number {
-            color: #ff8888;
+            color: #ff5555;
+            font-weight: 900;
         }
 
         .cup-item.sensor-red {
-            opacity: 0.85;
+            opacity: 0.75;
+        }
+
+        /* Mode manuel - rond cochable */
+        .cup-item {
+            position: relative;
+        }
+
+        .cup-select-circle {
+            position: absolute;
+            bottom: -6px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            background: rgba(0, 0, 0, 0.4);
+            opacity: 0.5;
+            transition: all 0.25s ease;
+            z-index: 5;
+        }
+
+        .cup-item.manual-selected .cup-select-circle {
+            opacity: 1;
+            background: var(--primary);
+            border-color: var(--primary);
+            box-shadow: 0 0 12px var(--glow);
+        }
+
+        .cup-item.manual-selected .cup-select-circle::after {
+            content: '✓';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 12px;
+            color: #000;
+            font-weight: 900;
+        }
+
+        .cup-item.manual-selected .cup-icon {
+            border: 2px solid var(--primary);
+            box-shadow: 0 0 20px var(--glow);
         }
 
         /* Stats Bar */
@@ -1047,7 +1099,7 @@
                 <span class="brand-name">X~Code●</span>
                 <img src="https://pfst.cf2.poecdn.net/base/image/65657b77e8839cfa847e4c4a811781bb99060deea0cc7a2b2e42b2d72a80e3ba?w=640&h=640" alt="X~Code Logo" class="badge-img">
             </div>
-            <span class="version-tag">THIMBLES DETECTOR v20.1 • MODE IPHONE</span>
+            <span class="version-tag">THIMBLES DETECTOR v21.0 • AUTO + MANUEL</span>
         </header>
 
         <!-- WebSocket Status Bar -->
@@ -1110,20 +1162,26 @@
                 <span id="status-text">Inactif</span>
             </div>
 
-            <!-- Cups Visual -->
+            <!-- Cups Visual + Mode Manuel -->
             <div class="cups-visual" id="cups-container">
                 <div class="cup-item" data-cup="1">
                     <div class="cup-icon"></div>
                     <span class="cup-number">1</span>
+                    <div class="cup-select-circle"></div>
                 </div>
                 <div class="cup-item" data-cup="2">
                     <div class="cup-icon"></div>
                     <span class="cup-number">2</span>
+                    <div class="cup-select-circle"></div>
                 </div>
                 <div class="cup-item" data-cup="3">
                     <div class="cup-icon"></div>
                     <span class="cup-number">3</span>
+                    <div class="cup-select-circle"></div>
                 </div>
+            </div>
+            <div style="text-align:center;font-size:11px;color:var(--text-dim);margin-top:8px;">
+                Mode manuel : tape sur la boîte (une seule) pour enregistrer le résultat
             </div>
 
             <!-- Live Data Panel -->
@@ -1409,6 +1467,12 @@
                     state.ws.onmessage = function(event) {
                         state.wsMessageCount++;
                         el.wsDataCount.textContent = state.wsMessageCount + ' msgs';
+
+                        // Indicateur visuel : vraies données reçues
+                        const livePanel = document.querySelector('.live-data-panel');
+                        if (livePanel) {
+                            livePanel.classList.add('has-live-data');
+                        }
 
                         try {
                             const data = JSON.parse(event.data);
@@ -1775,12 +1839,12 @@
             function runPrediction() {
                 if (!state.isRunning) return;
 
-                // TIMING CONFIGURATION
-                const jouerDuration = 7000;      // JOUER alert shows for 7 seconds
-                const scanTime = 1500;           // Scanning animation after JOUER
-                const predictionDisplayTime = 5000; // Prediction visible for 5 seconds
-                const jouerHideBeforeEnd = 3000; // Hide JOUER 3s before prediction disappears
-                const pauseBetweenCycles = 2000; // Pause before next cycle
+                // TIMING CONFIGURATION (plus rapide et agressif)
+                const jouerDuration = 3800;      // JOUER alert plus court
+                const scanTime = 700;            // Scan très rapide
+                const predictionDisplayTime = 2800; // Affichage prédiction plus court
+                const jouerHideBeforeEnd = 1400;
+                const pauseBetweenCycles = 900;  // Cycle plus agressif
 
                 // === CHECK CAPTURE (optionnel sur iPhone / mobile) ===
                 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
@@ -1993,12 +2057,36 @@
                 logToConsole('Historique effacé', 'info');
             });
 
-            // Cup click handlers
+            // Cup click handlers - Mode Manuel (une seule sélection)
             document.querySelectorAll('.cup-item').forEach(cup => {
                 cup.addEventListener('click', () => {
-                    if (!state.isRunning) return;
                     const cupNum = parseInt(cup.dataset.cup);
-                    showPrediction(cupNum);
+
+                    // Toggle / select only one
+                    const alreadySelected = cup.classList.contains('manual-selected');
+
+                    document.querySelectorAll('.cup-item').forEach(item => {
+                        item.classList.remove('manual-selected');
+                    });
+
+                    if (!alreadySelected) {
+                        cup.classList.add('manual-selected');
+                        state.currentPrediction = cupNum;
+                        el.predictionValue.textContent = cupNum;
+                        el.predictionLabel.textContent = `Sélection manuelle : Gobelet ${cupNum}`;
+                        logToConsole(`Mode manuel → Gobelet ${cupNum} sélectionné`, 'success');
+
+                        // If system is running, treat as prediction
+                        if (state.isRunning) {
+                            showPrediction(cupNum);
+                        }
+                    } else {
+                        // Deselect
+                        state.currentPrediction = null;
+                        el.predictionValue.textContent = '—';
+                        el.predictionLabel.textContent = 'Sélection annulée';
+                        logToConsole('Sélection manuelle annulée', 'info');
+                    }
                 });
             });
 
